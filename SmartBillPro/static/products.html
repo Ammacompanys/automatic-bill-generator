@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SmartBill – Products</title>
+<link rel="stylesheet" href="/static/css/styles.css"/>
+<style>
+.prod-shell{min-height:100vh;background:var(--bg);}
+.prod-topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:0 28px;height:60px;background:var(--surface);
+  border-bottom:1px solid var(--border);box-shadow:var(--shadow);}
+.prod-body{padding:28px;max-width:1200px;margin:0 auto;}
+.prod-page-title{margin-bottom:24px;}
+.prod-page-title h1{font-size:24px;font-weight:800;letter-spacing:-.4px;}
+.prod-page-title p{font-size:13px;color:var(--text2);margin-top:3px;}
+
+/* Search + Add bar */
+.prod-toolbar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;}
+.prod-toolbar input{max-width:320px;}
+.prod-toolbar .spacer{flex:1;}
+
+/* Product table */
+.prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+           overflow:hidden;box-shadow:var(--shadow);}
+.prod-tbl{width:100%;border-collapse:collapse;}
+.prod-tbl thead th{background:var(--surface2);padding:10px 16px;text-align:left;
+  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);border-bottom:1px solid var(--border);}
+.prod-tbl tbody td{padding:11px 16px;border-bottom:1px solid var(--border2);
+  vertical-align:middle;font-size:13px;}
+.prod-tbl tbody tr:hover td{background:#f8faff;}
+.prod-bc{font-family:var(--mono);font-size:11px;color:var(--muted);}
+.prod-actions{display:flex;gap:6px;}
+.btn-edit{padding:5px 12px;font-size:11px;}
+.btn-del {padding:5px 12px;font-size:11px;}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);
+  z-index:100;align-items:center;justify-content:center;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--surface);border-radius:var(--r2);padding:28px;width:480px;
+  max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.15);max-height:90vh;overflow-y:auto;}
+.modal h2{font-size:18px;font-weight:800;margin-bottom:20px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-grid .full{grid-column:1/-1;}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.form-group label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+.form-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;}
+
+/* Stock badge */
+.stock-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;
+             padding:2px 8px;border-radius:10px;}
+.stock-badge.high{color:#15803d;background:#dcfce7;border:1px solid #86efac;}
+.stock-badge.mid {color:#92400e;background:#fef9c3;border:1px solid #fde68a;}
+.stock-badge.low {color:#991b1b;background:#fee2e2;border:1px solid #fca5a5;}
+.empty-row td{text-align:center;padding:40px;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="prod-shell">
+
+  <div class="prod-topbar">
+    <div class="logo">
+      <div class="logo-mark">SB</div>
+      <div><div class="logo-name">SmartBill</div><div class="logo-sub">Product Manager</div></div>
+    </div>
+    <div class="topbar-actions">
+      <a href="/"          class="btn btn-sm" style="text-decoration:none;">🧾 Billing</a>
+      <a href="/analytics" class="btn btn-sm" style="text-decoration:none;">🤖 Analytics</a>
+    </div>
+  </div>
+
+  <div class="prod-body">
+    <div class="prod-page-title">
+      <h1>📦 Product Manager</h1>
+      <p>Add, edit and manage your product catalogue. Barcodes are used for scanning at billing.</p>
+    </div>
+
+    <div class="prod-toolbar">
+      <input type="text" id="search-input" placeholder="Search by name, barcode or category…" oninput="searchProducts()"/>
+      <div class="spacer"></div>
+      <button class="btn btn-primary" onclick="openAdd()">+ Add Product</button>
+    </div>
+
+    <div class="prod-card">
+      <table class="prod-tbl">
+        <thead><tr>
+          <th>Barcode</th><th>Name</th><th>Category</th>
+          <th>Price</th><th>GST</th><th>Stock</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="prod-body">
+          <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2 id="modal-title">Add Product</h2>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>Barcode *</label>
+        <input type="text" id="f-barcode" placeholder="e.g. 8901234567890"/>
+      </div>
+      <div class="form-group full">
+        <label>Product Name *</label>
+        <input type="text" id="f-name" placeholder="e.g. Parle-G Biscuits"/>
+      </div>
+      <div class="form-group">
+        <label>Price (₹) *</label>
+        <input type="number" id="f-price" placeholder="0.00" step="0.01"/>
+      </div>
+      <div class="form-group">
+        <label>GST Rate (%)</label>
+        <select id="f-gst">
+          <option value="0">0%</option><option value="5" selected>5%</option>
+          <option value="12">12%</option><option value="18">18%</option><option value="28">28%</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select id="f-category">
+          <option>Snacks</option><option>Grocery</option><option>Dairy</option>
+          <option>Beverage</option><option>Stationery</option><option>Personal Care</option><option>General</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Unit</label>
+        <input type="text" id="f-unit" placeholder="e.g. 100g, 1pc, 500ml"/>
+      </div>
+      <div class="form-group full">
+        <label>Stock Quantity</label>
+        <input type="number" id="f-stock" placeholder="100" value="100"/>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="modal-save-btn" onclick="saveProduct()">Save Product</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+let allProducts=[], editId=null;
+
+async function loadProducts(){
+  const r=await fetch('/api/products');
+  allProducts=await r.json();
+  renderTable(allProducts);
+}
+
+function searchProducts(){
+  const q=document.getElementById('search-input').value.trim().toLowerCase();
+  if(!q){renderTable(allProducts);return;}
+  renderTable(allProducts.filter(p=>
+    p.name.toLowerCase().includes(q)||p.barcode.includes(q)||p.category.toLowerCase().includes(q)));
+}
+
+function renderTable(products){
+  const tb=document.getElementById('prod-body');
+  if(!products.length){
+    tb.innerHTML='<tr class="empty-row"><td colspan="7">No products found</td></tr>'; return;
+  }
+  tb.innerHTML=products.map(p=>{
+    const sl=p.stock>100?'high':p.stock>30?'mid':'low';
+    const slabel=p.stock>100?'High':p.stock>30?'Medium':'Low';
+    return `<tr>
+      <td><span class="prod-bc">${esc(p.barcode)}</span></td>
+      <td><b>${esc(p.name)}</b></td>
+      <td>${esc(p.category)}</td>
+      <td style="font-family:var(--mono);">₹${p.price.toFixed(2)}</td>
+      <td style="font-family:var(--mono);">${p.gst_rate}%</td>
+      <td><span class="stock-badge ${sl}">${p.stock} · ${slabel}</span></td>
+      <td><div class="prod-actions">
+        <button class="btn btn-sm btn-edit" onclick='openEdit(${JSON.stringify(p)})'>Edit</button>
+        <button class="btn btn-sm btn-del btn-red" onclick="deleteProduct(${p.id},'${esc(p.name)}')">Delete</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function openAdd(){
+  editId=null;
+  document.getElementById('modal-title').textContent='Add Product';
+  document.getElementById('modal-save-btn').textContent='Add Product';
+  ['barcode','name','price','unit'].forEach(f=>document.getElementById('f-'+f).value='');
+  document.getElementById('f-stock').value='100';
+  document.getElementById('f-gst').value='5';
+  document.getElementById('f-category').value='Grocery';
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function openEdit(p){
+  editId=p.id;
+  document.getElementById('modal-title').textContent='Edit Product';
+  document.getElementById('modal-save-btn').textContent='Save Changes';
+  document.getElementById('f-barcode').value=p.barcode;
+  document.getElementById('f-name').value=p.name;
+  document.getElementById('f-price').value=p.price;
+  document.getElementById('f-gst').value=p.gst_rate;
+  document.getElementById('f-category').value=p.category;
+  document.getElementById('f-unit').value=p.unit;
+  document.getElementById('f-stock').value=p.stock;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function closeModal(){document.getElementById('modal-overlay').classList.remove('show');}
+
+async function saveProduct(){
+  const data={
+    barcode:document.getElementById('f-barcode').value.trim(),
+    name:   document.getElementById('f-name').value.trim(),
+    price:  parseFloat(document.getElementById('f-price').value)||0,
+    gst_rate:parseFloat(document.getElementById('f-gst').value),
+    category:document.getElementById('f-category').value,
+    unit:   document.getElementById('f-unit').value.trim()||'pcs',
+    stock:  parseInt(document.getElementById('f-stock').value)||0,
+  };
+  if(!data.barcode||!data.name||!data.price){toast('Barcode, name and price are required','bad');return;}
+  const url=editId?`/api/products/${editId}`:'/api/products';
+  const method=editId?'PUT':'POST';
+  const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const d=await r.json();
+  if(d.success){toast(editId?'Product updated':'Product added','ok');closeModal();loadProducts();}
+  else toast(d.message||'Error saving','bad');
+}
+
+async function deleteProduct(id,name){
+  if(!confirm(`Delete "${name}"?`))return;
+  await fetch(`/api/products/${id}`,{method:'DELETE'});
+  toast('Product deleted','ok');
+  loadProducts();
+}
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function toast(msg,type='ok'){const el=document.getElementById('toast');el.textContent=msg;el.className=`toast show ${type}`;clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),3000);}
+
+loadProducts();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+flask==3.0.3
+flask-cors==4.0.1
+flask-socketio==5.3.6
+gunicorn==22.0.0
+eventlet==0.36.1
+psycopg2-binary==2.9.9
+cloud-sql-python-connector[pg8000]==1.9.0
+reportlab==4.2.2
+qrcode[pil]==7.4.2
+Pillow==10.3.0
+python-dotenv==1.0.1

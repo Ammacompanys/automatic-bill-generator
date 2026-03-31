@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>SmartBill Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a1a;font-family:'Plus Jakarta Sans',sans-serif;}
+
+/* fullscreen video */
+#video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;}
+#canvas{display:none;}
+
+/* overlays */
+.ov-top{position:fixed;top:0;left:0;right:0;height:160px;
+  background:linear-gradient(to bottom,rgba(10,10,26,.92),transparent);z-index:2;}
+.ov-bot{position:fixed;bottom:0;left:0;right:0;height:260px;
+  background:linear-gradient(to top,rgba(10,10,26,.95),transparent);z-index:2;}
+
+/* header */
+.hdr{position:fixed;top:0;left:0;right:0;z-index:10;
+  display:flex;align-items:center;justify-content:space-between;padding:18px 22px;}
+
+.brand-s{display:flex;align-items:center;gap:9px;}
+.brand-icon-s{width:34px;height:34px;background:linear-gradient(135deg,#6366f1,#8b5cf6);
+  border-radius:9px;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:900;color:#fff;}
+.brand-name-s{font-size:15px;font-weight:800;color:#fff;}
+
+.conn-pill{display:flex;align-items:center;gap:6px;padding:6px 13px;
+  border-radius:20px;font-size:11px;font-weight:700;
+  border:1px solid rgba(255,255,255,.15);
+  color:#fff;background:rgba(15,15,40,.7);backdrop-filter:blur(10px);}
+.conn-led{width:8px;height:8px;border-radius:50%;background:#ef4444;}
+.conn-led.on{background:#10b981;animation:cp 1.5s infinite;}
+@keyframes cp{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* scan guide */
+.guide-wrap{position:fixed;top:50%;left:50%;transform:translate(-50%,-60%);
+  width:82vw;max-width:320px;height:155px;z-index:5;}
+
+.corner{position:absolute;width:26px;height:26px;border-style:solid;}
+.corner.tl{top:0;left:0;border-color:#6366f1;border-width:3px 0 0 3px;border-radius:5px 0 0 0}
+.corner.tr{top:0;right:0;border-color:#6366f1;border-width:3px 3px 0 0;border-radius:0 5px 0 0}
+.corner.bl{bottom:0;left:0;border-color:#6366f1;border-width:0 0 3px 3px;border-radius:0 0 0 5px}
+.corner.br{bottom:0;right:0;border-color:#6366f1;border-width:0 3px 3px 0;border-radius:0 0 5px 0}
+
+@keyframes scanAnim{0%,100%{top:8%;box-shadow:0 0 12px rgba(99,102,241,.8)}50%{top:78%;box-shadow:0 0 12px rgba(139,92,246,.8)}}
+.scan-laser{position:absolute;left:4%;right:4%;height:2px;
+  background:linear-gradient(90deg,transparent,#6366f1 30%,#8b5cf6 70%,transparent);
+  animation:scanAnim 2.2s ease-in-out infinite;transition:opacity .3s;}
+.scan-laser.hit{background:linear-gradient(90deg,transparent,#10b981 30%,#059669 70%,transparent);}
+
+.guide-label{position:absolute;bottom:-34px;left:0;right:0;
+  text-align:center;font-size:12px;font-weight:600;
+  color:rgba(255,255,255,.7);}
+
+/* bottom panel */
+.bottom{position:fixed;bottom:0;left:0;right:0;z-index:10;padding:16px 20px 36px;}
+
+/* result card */
+.result{
+  background:rgba(10,10,26,.85);backdrop-filter:blur(16px);
+  border:1px solid rgba(255,255,255,.1);border-radius:16px;
+  padding:14px 18px;margin-bottom:12px;display:none;
+}
+.result.show{display:block;animation:slideUp .2s ease;}
+.result.found{border-color:rgba(16,185,129,.4);background:rgba(5,46,22,.8);}
+.result.nf{border-color:rgba(239,68,68,.4);background:rgba(69,10,10,.8);}
+@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.r-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.r-name{font-size:14px;font-weight:700;color:#fff;margin-bottom:3px;}
+.r-meta{font-size:11px;color:rgba(255,255,255,.5);}
+.r-price{font-size:18px;font-weight:900;color:#34d399;font-family:monospace;flex-shrink:0;padding-top:2px;}
+
+/* counter */
+.counter-row{display:flex;align-items:center;justify-content:space-between;
+  background:rgba(10,10,26,.75);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,.1);border-radius:12px;
+  padding:10px 18px;margin-bottom:12px;}
+.c-lbl{font-size:11px;font-weight:600;color:rgba(255,255,255,.4);}
+.c-val{font-size:22px;font-weight:900;
+  background:linear-gradient(135deg,#6366f1,#8b5cf6);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  font-family:monospace;}
+
+/* buttons */
+.btn-row{display:flex;gap:10px;}
+.cam-btn{flex:1;padding:15px 10px;border:none;border-radius:14px;
+  font-size:15px;font-weight:700;cursor:pointer;
+  font-family:'Plus Jakarta Sans',sans-serif;transition:all .15s;}
+.start-btn{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;
+  box-shadow:0 4px 20px rgba(99,102,241,.4);}
+.start-btn:active{transform:scale(.97);}
+.stop-btn{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;
+  box-shadow:0 4px 20px rgba(239,68,68,.4);}
+.stop-btn:active{transform:scale(.97);}
+.torch-btn{background:rgba(255,255,255,.12);color:#fff;
+  width:54px;flex:none;font-size:20px;backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.15);}
+
+/* session info */
+.sess-txt{text-align:center;font-size:10px;
+  color:rgba(255,255,255,.2);margin-bottom:8px;font-family:monospace;}
+
+/* connect screen */
+.cs{position:fixed;inset:0;z-index:100;
+  background:linear-gradient(135deg,#0f0e2e 0%,#1e1b4b 50%,#0f0e2e 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px;}
+
+.cs-icon{font-size:64px;margin-bottom:24px;filter:drop-shadow(0 0 30px rgba(99,102,241,.5));}
+.cs-title{font-size:26px;font-weight:900;color:#fff;margin-bottom:8px;text-align:center;}
+.cs-sub{font-size:14px;color:#818cf8;margin-bottom:36px;line-height:1.7;text-align:center;max-width:300px;}
+
+.cs-card{background:rgba(255,255,255,.06);backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,.12);border-radius:18px;
+  padding:18px 22px;margin-bottom:20px;width:100%;max-width:320px;}
+.cs-label{font-size:10px;color:#818cf8;margin-bottom:8px;
+  text-transform:uppercase;letter-spacing:.1em;font-weight:700;}
+.cs-inp{width:100%;background:transparent;border:none;outline:none;
+  font-size:22px;font-weight:800;color:#a5b4fc;font-family:monospace;text-align:center;}
+
+.cs-btn{width:100%;max-width:320px;padding:17px;
+  background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;
+  border-radius:14px;font-size:16px;font-weight:800;cursor:pointer;
+  font-family:'Plus Jakarta Sans',sans-serif;
+  box-shadow:0 6px 30px rgba(99,102,241,.5);transition:all .15s;}
+.cs-btn:active{transform:scale(.97);}
+.cs-hint{font-size:11px;color:#4b5563;margin-top:14px;text-align:center;}
+</style>
+</head>
+<body>
+
+<!-- CONNECT SCREEN -->
+<div class="cs" id="cs">
+  <div class="cs-icon">📡</div>
+  <div class="cs-title">SmartBill Scanner</div>
+  <div class="cs-sub">Your phone becomes the barcode scanner. Products appear on the laptop instantly.</div>
+  <div class="cs-card">
+    <div class="cs-label">Session ID (must match laptop)</div>
+    <input class="cs-inp" id="sid" value="smartbill" maxlength="20"/>
+  </div>
+  <button class="cs-btn" onclick="connect()">⚡ Connect &amp; Start</button>
+  <div class="cs-hint">Make sure laptop has SmartBill open · Same session ID</div>
+</div>
+
+<!-- SCANNER UI -->
+<video id="video" playsinline autoplay muted></video>
+<canvas id="canvas"></canvas>
+<div class="ov-top"></div>
+<div class="ov-bot"></div>
+
+<div class="hdr">
+  <div class="brand-s">
+    <div class="brand-icon-s">SB</div>
+    <div class="brand-name-s">SmartBill</div>
+  </div>
+  <div class="conn-pill" id="conn">
+    <div class="conn-led" id="conn-led"></div>
+    <span id="conn-txt">Connecting…</span>
+  </div>
+</div>
+
+<div class="guide-wrap">
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+  <div class="scan-laser" id="laser"></div>
+  <div class="guide-label" id="g-hint">Point camera at barcode</div>
+</div>
+
+<div class="bottom">
+  <div class="sess-txt" id="sess-txt"></div>
+  <div class="result" id="result">
+    <div class="r-row">
+      <div>
+        <div class="r-name"  id="r-name"></div>
+        <div class="r-meta"  id="r-meta"></div>
+      </div>
+      <div class="r-price" id="r-price"></div>
+    </div>
+  </div>
+  <div class="counter-row">
+    <div class="c-lbl">Barcodes scanned</div>
+    <div class="c-val" id="cnt">0</div>
+  </div>
+  <div class="btn-row">
+    <button class="cam-btn start-btn" id="startBtn" onclick="startCam()">▶ Start Camera</button>
+    <button class="cam-btn stop-btn"  id="stopBtn"  onclick="stopCam()"  style="display:none">■ Stop</button>
+    <button class="cam-btn torch-btn" id="torchBtn" onclick="toggleTorch()" style="display:none">🔦</button>
+  </div>
+</div>
+
+<script>
+let socket=null, sessId='smartbill', cnt=0;
+let stream=null, rafId=null, torchOn=false;
+let lastCode='', lastCodeT=0;
+let zxReader=null, zxReady=false, nativeDet=null;
+
+function connect(){
+  sessId=document.getElementById('sid').value.trim()||'smartbill';
+  document.getElementById('cs').style.display='none';
+  document.getElementById('sess-txt').textContent='Session: '+sessId;
+
+  socket=io(window.location.origin,{transports:['websocket','polling']});
+  socket.on('connect',()=>{
+    setConn(true);
+    socket.emit('join_session',{session_id:sessId,role:'phone'});
+  });
+  socket.on('disconnect',()=>setConn(false));
+  socket.on('connect_error',()=>setConn(false));
+
+  loadZXing();
+}
+
+function setConn(on){
+  const led=document.getElementById('conn-led'),txt=document.getElementById('conn-txt');
+  if(on){led.classList.add('on');txt.textContent='Connected';}
+  else{led.classList.remove('on');txt.textContent='Disconnected';}
+}
+
+function loadZXing(){
+  const s=document.createElement('script');
+  s.src='https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js';
+  s.onload=()=>{
+    const h=new Map([
+      [ZXing.DecodeHintType.POSSIBLE_FORMATS,[
+        ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E,
+        ZXing.BarcodeFormat.QR_CODE]],
+      [ZXing.DecodeHintType.TRY_HARDER,true]]);
+    zxReader=new ZXing.MultiFormatReader();
+    zxReader.setHints(h); zxReady=true;
+  };
+  document.head.appendChild(s);
+}
+
+async function startCam(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}}
+    });
+  }catch{
+    alert('Camera permission denied.\nPlease allow camera access and reload.'); return;
+  }
+  const v=document.getElementById('video'); v.srcObject=stream; await v.play();
+  document.getElementById('startBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='flex';
+  document.getElementById('torchBtn').style.display='flex';
+  socket?.emit('phone_status',{session_id:sessId,status:'camera_on'});
+
+  if(window.BarcodeDetector){
+    try{nativeDet=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code']});}
+    catch{nativeDet=new BarcodeDetector();}
+    nativeLoop(v);
+  }else{ zxingLoop(v); }
+}
+
+function stopCam(){
+  if(rafId){cancelAnimationFrame(rafId);rafId=null;}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  const v=document.getElementById('video'); v.srcObject=null;
+  document.getElementById('startBtn').style.display='flex';
+  document.getElementById('stopBtn').style.display='none';
+  document.getElementById('torchBtn').style.display='none';
+  socket?.emit('phone_status',{session_id:sessId,status:'camera_off'});
+}
+
+async function toggleTorch(){
+  if(!stream)return;
+  const t=stream.getVideoTracks()[0];
+  try{torchOn=!torchOn;await t.applyConstraints({advanced:[{torch:torchOn}]});
+    document.getElementById('torchBtn').textContent=torchOn?'💡':'🔦';}
+  catch{}
+}
+
+function nativeLoop(v){
+  function t(){
+    if(!stream)return; rafId=requestAnimationFrame(t);
+    if(v.readyState<4)return;
+    nativeDet.detect(v).then(r=>{if(r.length)onCode(r[0].rawValue);}).catch(()=>{});
+  }
+  rafId=requestAnimationFrame(t);
+}
+
+function zxingLoop(v){
+  const cv=document.getElementById('canvas'),ctx=cv.getContext('2d',{willReadFrequently:true});
+  let lt=0;
+  function t(ts){
+    if(!stream)return; rafId=requestAnimationFrame(t);
+    if(ts-lt<80)return; lt=ts;
+    if(v.readyState<4)return;
+    const w=v.videoWidth,h=v.videoHeight; if(!w||!h)return;
+    cv.width=w;cv.height=h;ctx.drawImage(v,0,0,w,h);
+    if(!zxReady)return;
+    try{
+      const d=ctx.getImageData(0,0,w,h);
+      const r=zxReader.decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.RGBLuminanceSource(d.data,w,h))));
+      if(r)onCode(r.getText());
+    }catch{}
+  }
+  rafId=requestAnimationFrame(t);
+}
+
+function onCode(raw){
+  const code=raw.trim(); if(!code)return;
+  const now=Date.now();
+  if(code===lastCode&&now-lastCodeT<2500)return;
+  lastCode=code; lastCodeT=now;
+
+  const laser=document.getElementById('laser'),hint=document.getElementById('g-hint');
+  laser.classList.add('hit'); hint.textContent='✓ Detected!';
+  setTimeout(()=>{laser.classList.remove('hit');hint.textContent='Point camera at barcode';},700);
+
+  document.getElementById('cnt').textContent=++cnt;
+  navigator.vibrate?.(60);
+
+  socket?.emit('barcode_scanned',{session_id:sessId,barcode:code});
+  showResult(code);
+}
+
+async function showResult(bc){
+  const el=document.getElementById('result');
+  try{
+    const r=await fetch(`/api/product/${encodeURIComponent(bc)}`);
+    if(r.ok){
+      const d=await r.json(),p=d.product;
+      el.className='result found show';
+      document.getElementById('r-name').textContent=p.name;
+      document.getElementById('r-meta').textContent=`${p.category} · ${p.unit}`;
+      document.getElementById('r-price').textContent=`₹${p.price.toFixed(2)}`;
+    }else{
+      el.className='result nf show';
+      document.getElementById('r-name').textContent=`Not found: ${bc}`;
+      document.getElementById('r-meta').textContent='Add on laptop → Products';
+      document.getElementById('r-price').textContent='';
+    }
+  }catch{
+    el.className='result found show';
+    document.getElementById('r-name').textContent=bc;
+    document.getElementById('r-meta').textContent='Sent to laptop ✓';
+    document.getElementById('r-price').textContent='';
+  }
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),4000);
+}
+</script>
+</body>
+</html>
