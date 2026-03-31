@@ -1,0 +1,40 @@
+runtime: python312
+
+# Use F2 instance for WebSocket support
+instance_class: F2
+
+# Entrypoint — gunicorn with eventlet for WebSocket
+entrypoint: gunicorn -k eventlet -w 1 -b :$PORT wsgi:app --timeout 120
+
+# Environment variables — change these to your values
+env_variables:
+  # Database
+  DB_HOST: "/cloudsql/smartbill-pro:asia-south1:smartbill-db"
+  DB_NAME: "billing"
+  DB_USER: "smartbill"
+  DB_PASS: "YourStrongPassword123"
+  DB_CONNECTION_NAME: "smartbill-pro:asia-south1:smartbill-db"
+
+  # App settings
+  SECRET_KEY: "change-this-to-a-long-random-string-abc123xyz"
+  FLASK_ENV: "production"
+
+# Cloud SQL connection
+beta_settings:
+  cloud_sql_instances: smartbill-pro:asia-south1:smartbill-db
+
+# Static files served directly by GAE (faster than Flask)
+handlers:
+  - url: /static
+    static_dir: static
+    secure: always
+
+  - url: /.*
+    script: auto
+    secure: always
+
+# Automatic scaling
+automatic_scaling:
+  min_instances: 0
+  max_instances: 3
+  target_cpu_utilization: 0.65

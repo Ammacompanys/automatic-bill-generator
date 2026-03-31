@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SmartBill – AI Analytics</title>
+<link rel="stylesheet" href="/static/css/styles.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* Analytics-specific styles */
+.analytics-shell{min-height:100vh;background:var(--bg);}
+
+.analytics-topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:0 28px;height:60px;background:var(--surface);
+  border-bottom:1px solid var(--border);box-shadow:var(--shadow);}
+
+.analytics-body{padding:28px;max-width:1400px;margin:0 auto;}
+
+/* Page title */
+.page-title{margin-bottom:28px;}
+.page-title h1{font-size:26px;font-weight:800;letter-spacing:-.5px;color:var(--text);}
+.page-title p{font-size:14px;color:var(--text2);margin-top:4px;}
+.gen-time{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:3px;}
+
+/* Stat cards */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+           padding:20px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+.stat-card.blue::before{background:var(--accent);}
+.stat-card.green::before{background:var(--green);}
+.stat-card.amber::before{background:var(--amber);}
+.stat-card.red::before{background:var(--red);}
+.stat-icon{font-size:22px;margin-bottom:10px;}
+.stat-value{font-size:28px;font-weight:800;font-family:var(--mono);color:var(--text);line-height:1;}
+.stat-label{font-size:12px;color:var(--text2);margin-top:5px;font-weight:500;}
+
+/* Charts grid */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px;}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+            padding:22px;box-shadow:var(--shadow);}
+.chart-card.wide{grid-column:1/-1;}
+.chart-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.chart-sub{font-size:12px;color:var(--muted);margin-bottom:18px;}
+.chart-wrap{position:relative;height:260px;}
+
+/* Predictions table */
+.pred-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);
+           padding:22px;box-shadow:var(--shadow);margin-bottom:20px;}
+.pred-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.pred-sub{font-size:12px;color:var(--muted);margin-bottom:18px;}
+
+.pred-table{width:100%;border-collapse:collapse;}
+.pred-table thead th{background:var(--surface2);padding:10px 14px;text-align:left;
+  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);border-bottom:1px solid var(--border);}
+.pred-table tbody td{padding:12px 14px;border-bottom:1px solid var(--border2);
+  vertical-align:middle;font-size:13px;}
+.pred-table tbody tr:hover td{background:#f8faff;}
+
+/* Trend badge */
+.trend{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;
+       padding:2px 7px;border-radius:6px;font-family:var(--mono);}
+.trend.up  {color:#15803d;background:#dcfce7;}
+.trend.down{color:#991b1b;background:#fee2e2;}
+.trend.flat{color:#92400e;background:#fef9c3;}
+
+/* Urgency badge */
+.urgency{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;
+         padding:3px 9px;border-radius:20px;}
+.urgency.critical{color:#991b1b;background:#fee2e2;border:1px solid #fca5a5;}
+.urgency.low     {color:#92400e;background:#fef9c3;border:1px solid #fde68a;}
+.urgency.ok      {color:#15803d;background:#dcfce7;border:1px solid #86efac;}
+
+/* Bar chart inside table */
+.mini-bar-wrap{display:flex;align-items:center;gap:8px;min-width:140px;}
+.mini-bar-bg{flex:1;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;}
+.mini-bar{height:100%;border-radius:4px;transition:width .6s ease;}
+
+/* Loading skeleton */
+.loading{display:flex;align-items:center;justify-content:center;height:200px;
+         color:var(--muted);font-size:14px;gap:10px;}
+.spinner{width:20px;height:20px;border:2px solid var(--border);
+         border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Stagger animation */
+.fade-in{opacity:0;transform:translateY(12px);animation:fadeIn .4s ease forwards;}
+@keyframes fadeIn{to{opacity:1;transform:none}}
+.fade-in:nth-child(1){animation-delay:.05s}
+.fade-in:nth-child(2){animation-delay:.1s}
+.fade-in:nth-child(3){animation-delay:.15s}
+.fade-in:nth-child(4){animation-delay:.2s}
+
+/* Category legend dot */
+.cat-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+
+@media(max-width:900px){
+  .stats-row{grid-template-columns:repeat(2,1fr);}
+  .charts-grid{grid-template-columns:1fr;}
+  .chart-card.wide{grid-column:1;}
+}
+</style>
+</head>
+<body>
+<div class="analytics-shell">
+
+  <!-- TOP BAR -->
+  <div class="analytics-topbar">
+    <div class="logo">
+      <div class="logo-mark">SB</div>
+      <div>
+        <div class="logo-name">SmartBill</div>
+        <div class="logo-sub">AI Analytics</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <a href="/"         class="btn btn-sm" style="text-decoration:none;">🧾 Billing</a>
+      <a href="/products" class="btn btn-sm" style="text-decoration:none;">📦 Products</a>
+      <button class="btn btn-primary btn-sm" onclick="loadData()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="analytics-body">
+
+    <div class="page-title">
+      <h1>🤖 AI Sales Predictions</h1>
+      <p>Next week's top-selling items based on sales trends, demand patterns & current stock levels.</p>
+      <div class="gen-time" id="gen-time">Loading…</div>
+    </div>
+
+    <!-- STAT CARDS -->
+    <div class="stats-row" id="stats-row">
+      <div class="stat-card blue fade-in">
+        <div class="stat-icon">📈</div>
+        <div class="stat-value" id="stat-total-pred">—</div>
+        <div class="stat-label">Total predicted units next week</div>
+      </div>
+      <div class="stat-card green fade-in">
+        <div class="stat-icon">🏆</div>
+        <div class="stat-value" id="stat-top-item">—</div>
+        <div class="stat-label">Top predicted item</div>
+      </div>
+      <div class="stat-card amber fade-in">
+        <div class="stat-icon">⚠️</div>
+        <div class="stat-value" id="stat-low-stock">—</div>
+        <div class="stat-label">Low stock alerts</div>
+      </div>
+      <div class="stat-card red fade-in">
+        <div class="stat-icon">🚨</div>
+        <div class="stat-value" id="stat-critical">—</div>
+        <div class="stat-label">Critical — restock immediately</div>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW -->
+    <div class="charts-grid">
+
+      <!-- Daily Sales Trend -->
+      <div class="chart-card wide">
+        <div class="chart-title">Daily Sales Volume — Last 14 Days</div>
+        <div class="chart-sub">Total units sold per day. Weekend spikes indicate higher demand patterns.</div>
+        <div class="chart-wrap">
+          <div class="loading" id="load-daily"><div class="spinner"></div> Loading chart…</div>
+          <canvas id="chart-daily" style="display:none;"></canvas>
+        </div>
+      </div>
+
+      <!-- Predicted vs Actual -->
+      <div class="chart-card">
+        <div class="chart-title">Predicted vs Last Week (Top 8)</div>
+        <div class="chart-sub">Blue = last week actual · Green = predicted next week</div>
+        <div class="chart-wrap">
+          <div class="loading" id="load-pred"><div class="spinner"></div></div>
+          <canvas id="chart-pred" style="display:none;"></canvas>
+        </div>
+      </div>
+
+      <!-- Category Breakdown -->
+      <div class="chart-card">
+        <div class="chart-title">Category Sales Distribution</div>
+        <div class="chart-sub">Units sold by category this week</div>
+        <div class="chart-wrap">
+          <div class="loading" id="load-cat"><div class="spinner"></div></div>
+          <canvas id="chart-cat" style="display:none;"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- PREDICTIONS TABLE -->
+    <div class="pred-card">
+      <div class="pred-title">📊 Top 10 Predicted Items for Next Week</div>
+      <div class="pred-sub">Ranked by predicted demand · Stock alerts based on predicted units vs current inventory</div>
+      <div id="pred-loading" class="loading"><div class="spinner"></div> Calculating predictions…</div>
+      <table class="pred-table" id="pred-table" style="display:none;">
+        <thead><tr>
+          <th>#</th><th>Product</th><th>Category</th>
+          <th>Last Week</th><th>Predicted</th><th>Trend</th>
+          <th>Current Stock</th><th>Stock vs Demand</th><th>Status</th>
+        </tr></thead>
+        <tbody id="pred-body"></tbody>
+      </table>
+    </div>
+
+  </div><!-- /analytics-body -->
+</div><!-- /analytics-shell -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CAT_COLORS = {
+  Grocery:'#16a34a', Dairy:'#d97706', Snacks:'#7c3aed',
+  Beverage:'#0ea5e9', Stationery:'#2563eb', 'Personal Care':'#db2777',
+  General:'#64748b'
+};
+
+let chartDaily=null, chartPred=null, chartCat=null;
+
+async function loadData(){
+  try{
+    const r=await fetch('/api/analytics/predictions');
+    if(!r.ok)throw new Error('Server error '+r.status);
+    const data=await r.json();
+    renderStats(data);
+    renderDailyChart(data.daily_sales);
+    renderPredChart(data.predictions);
+    renderCatChart(data.category_sales);
+    renderPredTable(data.predictions);
+    document.getElementById('gen-time').textContent=
+      'Last updated: '+new Date(data.generated_at).toLocaleString('en-IN');
+  }catch(e){
+    toast('Failed to load data: '+e.message,'bad');
+    document.getElementById('gen-time').textContent='Error loading data — make sure python app.py is running';
+  }
+}
+
+function renderStats(data){
+  const preds=data.predictions;
+  const totalPred=preds.reduce((s,p)=>s+p.predicted,0);
+  const lowStock=preds.filter(p=>p.urgency==='low').length;
+  const critical=preds.filter(p=>p.urgency==='critical').length;
+  const top=preds[0]?.name||'—';
+
+  animCount('stat-total-pred',totalPred);
+  document.getElementById('stat-top-item').textContent=top.length>12?top.slice(0,12)+'…':top;
+  animCount('stat-low-stock',lowStock);
+  animCount('stat-critical',critical);
+}
+
+function animCount(id,target){
+  const el=document.getElementById(id);
+  let cur=0; const step=Math.max(1,Math.ceil(target/30));
+  const t=setInterval(()=>{cur=Math.min(cur+step,target);el.textContent=cur;if(cur>=target)clearInterval(t);},30);
+}
+
+function renderDailyChart(daily){
+  document.getElementById('load-daily').style.display='none';
+  const canvas=document.getElementById('chart-daily');
+  canvas.style.display='block';
+  if(chartDaily)chartDaily.destroy();
+
+  const labels=daily.map(d=>d.day.slice(5)); // MM-DD
+  const vals=daily.map(d=>d.total);
+
+  chartDaily=new Chart(canvas,{
+    type:'line',
+    data:{
+      labels,
+      datasets:[{
+        label:'Units sold',
+        data:vals,
+        borderColor:'#2563eb',
+        backgroundColor:'rgba(37,99,235,.08)',
+        borderWidth:2.5,
+        fill:true,
+        tension:.4,
+        pointBackgroundColor:'#2563eb',
+        pointRadius:4,
+        pointHoverRadius:6,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.parsed.y} units`}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:11}}},
+        y:{beginAtZero:true,grid:{color:'#f0f2f7'},ticks:{font:{size:11}}}
+      }
+    }
+  });
+}
+
+function renderPredChart(preds){
+  document.getElementById('load-pred').style.display='none';
+  const canvas=document.getElementById('chart-pred');
+  canvas.style.display='block';
+  if(chartPred)chartPred.destroy();
+
+  const top8=preds.slice(0,8);
+  const labels=top8.map(p=>p.name.length>14?p.name.slice(0,14)+'…':p.name);
+
+  chartPred=new Chart(canvas,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'Last Week',data:top8.map(p=>p.last_week),backgroundColor:'rgba(37,99,235,.7)',borderRadius:5,borderSkipped:false},
+        {label:'Predicted',data:top8.map(p=>p.predicted),backgroundColor:'rgba(22,163,74,.8)',borderRadius:5,borderSkipped:false},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{font:{size:11},boxWidth:12}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:10}}},
+        y:{beginAtZero:true,grid:{color:'#f0f2f7'},ticks:{font:{size:11}}}
+      }
+    }
+  });
+}
+
+function renderCatChart(cats){
+  document.getElementById('load-cat').style.display='none';
+  const canvas=document.getElementById('chart-cat');
+  canvas.style.display='block';
+  if(chartCat)chartCat.destroy();
+
+  const colors=cats.map(c=>CAT_COLORS[c.category]||'#64748b');
+
+  chartCat=new Chart(canvas,{
+    type:'doughnut',
+    data:{
+      labels:cats.map(c=>c.category),
+      datasets:[{
+        data:cats.map(c=>c.total),
+        backgroundColor:colors,
+        borderWidth:2,
+        borderColor:'#fff',
+        hoverOffset:8,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      cutout:'62%',
+      plugins:{
+        legend:{position:'right',labels:{font:{size:11},boxWidth:12,padding:10}},
+        tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.parsed} units`}}
+      }
+    }
+  });
+}
+
+function renderPredTable(preds){
+  document.getElementById('pred-loading').style.display='none';
+  const tbl=document.getElementById('pred-table');
+  tbl.style.display='table';
+
+  const maxPred=Math.max(...preds.map(p=>p.predicted),1);
+
+  document.getElementById('pred-body').innerHTML=preds.map((p,i)=>{
+    const trendPct=p.trend_pct;
+    const trendClass=trendPct>5?'up':trendPct<-5?'down':'flat';
+    const trendArrow=trendPct>5?'↑':trendPct<-5?'↓':'→';
+    const barPct=Math.round((p.predicted/maxPred)*100);
+    const barColor=p.urgency==='critical'?'#dc2626':p.urgency==='low'?'#d97706':'#16a34a';
+    const stockRatio=p.stock>0?Math.min(100,Math.round((p.stock/p.predicted)*100)):0;
+    const urgClass=p.urgency;
+    const urgLabel=p.urgency==='critical'?'🚨 Critical':p.urgency==='low'?'⚠️ Low Stock':'✓ Sufficient';
+    const catColor=CAT_COLORS[p.category]||'#64748b';
+
+    return `<tr>
+      <td style="font-weight:700;color:var(--muted);font-family:var(--mono)">${i+1}</td>
+      <td>
+        <div style="font-weight:700;font-size:13px;">${esc(p.name)}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">₹${p.price}</div>
+      </td>
+      <td><span style="display:inline-flex;align-items:center;gap:5px;">
+        <span style="width:8px;height:8px;border-radius:50%;background:${catColor};flex-shrink:0;"></span>
+        <span style="font-size:12px;">${esc(p.category)}</span>
+      </span></td>
+      <td style="font-family:var(--mono);font-weight:600;">${p.last_week}</td>
+      <td style="font-family:var(--mono);font-weight:700;color:var(--accent);">${p.predicted}</td>
+      <td><span class="trend ${trendClass}">${trendArrow} ${Math.abs(trendPct)}%</span></td>
+      <td style="font-family:var(--mono);">${p.stock} units</td>
+      <td>
+        <div class="mini-bar-wrap">
+          <div class="mini-bar-bg">
+            <div class="mini-bar" style="width:${barPct}%;background:${barColor};"></div>
+          </div>
+          <span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap;">${stockRatio}%</span>
+        </div>
+      </td>
+      <td><span class="urgency ${urgClass}">${urgLabel}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function toast(msg,type='ok'){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className=`toast show ${type}`;
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),4000);
+}
+
+// Load on page open
+loadData();
+</script>
+</body>
+</html>
